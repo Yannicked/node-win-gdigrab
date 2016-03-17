@@ -1,0 +1,14 @@
+{
+  "name": "node-win-gdigrab",
+  "version": "1.0.1",
+  "description": "Get a rgb array from the monitor",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "gdi"
+  ],
+  "author": "Yannick de Jong",
+  "license": "ISC"
+}
