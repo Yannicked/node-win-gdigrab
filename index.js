@@ -20,10 +20,10 @@ class gdi {
 		}
 		var da = [];
 		native_module.grab(function(d) {
-			for (var i = 0; i<(d.length); i+=4) {
+			/*for (var i = 0; i<(d.length); i+=4) {
 				da.push([d[i+2], d[i+1], d[i]]); // BGRA to RGB
-			}
-			cb(da);
+			}*/
+			cb(d);
 		});
 	}
 

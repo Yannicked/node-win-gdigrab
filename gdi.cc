@@ -51,15 +51,26 @@ namespace gdi {
 		HandleScope handleScope(isolate);
 		Work *work = static_cast<Work *>(req->data);
 		
-		Local<Object> slowBuffer;
-		node::Buffer::New(isolate, work->returndata, work->returnsize).ToLocal(&slowBuffer);
+		Local<Uint8Array> rgb = Uint8Array::New(ArrayBuffer::New(isolate, work->returnsize/4*3),0,work->returnsize/4*3);
+		uint8_t *rgbptr = (uint8_t*)rgb->Buffer()->GetContents().Data();
 		
-		Handle<Value> argv[] = {slowBuffer};
+		for(unsigned int i = 0; i<work->returnsize; i+=4) {			
+			unsigned int n = i/4*3;
+			
+			rgbptr[n] = work->returndata[i+2];
+			rgbptr[n+1] = work->returndata[i+1];
+			rgbptr[n+2] = work->returndata[i];
+		}
+		
+		//Local<Object> slowBuffer;
+		//node::Buffer::New(isolate, work->returndata, work->returnsize).ToLocal(&slowBuffer);
+		
+		Handle<Value> argv[] = {rgb};
 		
 		Local<Function>::New(isolate, work->callback)->
 		Call(isolate->GetCurrentContext()->Global(), 1, argv);
 		work->callback.Reset();
-
+		
 		delete work;
 	}
 	
