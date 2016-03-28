@@ -14,16 +14,17 @@ class gdi {
 		native_module.create(...arguments);
 	}
 
-	grab() {
+	grab(cb) {
 		if (!this._created) {
 			this._create();
 		}
 		var da = [];
-		var d = native_module.grab();
-		for (var i = 0; i<(d.length); i+=4) {
-			da.push([d[i+2], d[i+1], d[i]]); // BGRA to RGB
-		}
-		return da
+		native_module.grab(function(d) {
+			for (var i = 0; i<(d.length); i+=4) {
+				da.push([d[i+2], d[i+1], d[i]]); // BGRA to RGB
+			}
+			cb(da);
+		});
 	}
 
 	destroy() {

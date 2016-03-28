@@ -1,20 +1,10 @@
 #include <node.h>
-#include <node_buffer.h>
-#include <windows.h>
 #include <memory>
+#include <uv.h>
+#include <node_buffer.h>
 
 namespace gdi {
-	using v8::FunctionCallbackInfo;
-	using v8::Isolate;
-	using v8::Local;
-	using v8::MaybeLocal;
-	using v8::Object;
-	using v8::String;
-	using v8::Integer;
-	using v8::Value;
-	using v8::Context;
-	using v8::Function;
-	using v8::Handle;
+	using namespace v8;
 
 	HDC hScreen;
 	HDC hdcMem;
@@ -26,12 +16,16 @@ namespace gdi {
 	int ScaleX;
 	int ScaleY;
 	
-	void grab(const FunctionCallbackInfo<Value>& args) {
-		/*
-		int horizontal_resolution = args[0]->IntegerValue();
-		int vertical_resolution = args[1]->IntegerValue();
-		*/
-		Isolate* isolate = args.GetIsolate();
+	struct Work {
+	  uv_work_t request;
+	  Persistent<Function> callback;
+	  
+	  char* returndata;
+	  int returnsize;
+	};
+	
+	void workAsync(uv_work_t *req) {
+		Work *work = static_cast<Work *>(req->data);
 		
 		HGDIOBJ hOld = SelectObject(hdcMem, hBitmap);
 		SetStretchBltMode(hdcMem,HALFTONE);
@@ -46,18 +40,40 @@ namespace gdi {
 		bmi.bmiHeader.biWidth = ScaleX;
 		bmi.bmiHeader.biHeight = -ScaleY;
 		
-		char* ScreenData = (char*)malloc(4 * ScaleX * ScaleY);
+		work->returnsize = 4 * ScaleX * ScaleY;
+		work->returndata = (char*)malloc(work->returnsize);
+		
+		GetDIBits(hdcMem, hBitmap, 0, ScaleY, work->returndata, (BITMAPINFO*)&bmi, DIB_RGB_COLORS);
+	}
+	
+	void workAsyncComplete(uv_work_t *req, int status) {
+		Isolate * isolate = Isolate::GetCurrent();
+		HandleScope handleScope(isolate);
+		Work *work = static_cast<Work *>(req->data);
 		
 		Local<Object> slowBuffer;
+		node::Buffer::New(isolate, work->returndata, work->returnsize).ToLocal(&slowBuffer);
 		
-		GetDIBits(hdcMem, hBitmap, 0, ScaleY, ScreenData, (BITMAPINFO*)&bmi, DIB_RGB_COLORS);
-		node::Buffer::New(isolate, ScreenData, 4 * ScaleX * ScaleY).ToLocal(&slowBuffer);
+		Handle<Value> argv[] = {slowBuffer};
 		
-		args.GetReturnValue().Set(slowBuffer);
-		/*Local<Object> globalObj = isolate->GetCurrentContext()->Global();
-		Local<Function> bufferConstructor = Local<Function>::Cast(globalObj);
-		Handle<Value> constructorArgs[3] = { slowBuffer->handle_, v8::Integer::New(sizeof(ScreenData)), v8::Integer::New(0) };
-		Local<Object> actualBuffer = bufferConstructor->NewInstance(3, constructorArgs);*/
+		Local<Function>::New(isolate, work->callback)->
+		Call(isolate->GetCurrentContext()->Global(), 1, argv);
+		work->callback.Reset();
+
+		delete work;
+	}
+	
+	void grabAsync(const FunctionCallbackInfo<Value>& args) {
+		Isolate* isolate = args.GetIsolate();
+		Work * work = new Work();
+		work->request.data = work;
+		
+		Local<Function> callback = Local<Function>::Cast(args[0]);
+		work->callback.Reset(isolate, callback);
+		uv_queue_work(uv_default_loop(),&work->request,
+			workAsync,workAsyncComplete);
+
+		args.GetReturnValue().Set(Undefined(isolate));
 	}
 	
 	void create(const FunctionCallbackInfo<Value>& args) {
@@ -100,7 +116,7 @@ namespace gdi {
 	}
 	
 	void init(Local<Object> exports) {
-		NODE_SET_METHOD(exports, "grab", grab);
+		NODE_SET_METHOD(exports, "grab", grabAsync);
 		NODE_SET_METHOD(exports, "create", create);
 		NODE_SET_METHOD(exports, "destroy", destroy);
 	}
